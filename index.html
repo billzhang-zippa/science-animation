@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>科学动画播放器 · 图片分镜版</title>
+<style>
+  :root{
+    --paper:#FCFBF8; --ink:#2C2C2A; --line:#D3D1C7; --line2:#B4B2A9;
+    --bg:#F1EFE8; --accent:#185FA5; --warn:#A32D2D;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+  #app{display:flex;gap:16px;padding:16px;max-width:1400px;margin:0 auto;align-items:flex-start}
+  #wrap{flex:1;min-width:0}
+  #stage{position:relative;width:100%;aspect-ratio:16/9;background:var(--paper);
+    border:.5px solid var(--line);border-radius:12px;overflow:hidden}
+  .layer{position:absolute;inset:0;opacity:0;transition:opacity .8s ease;background:var(--paper)}
+  .layer img{width:100%;height:100%;object-fit:cover;display:block}
+  .kbA{animation:kbA 10s ease-out forwards}
+  .kbB{animation:kbB 10s ease-out forwards}
+  @keyframes kbA{from{transform:scale(1.02) translate(0,0)}to{transform:scale(1.13) translate(-1.6%,-1.2%)}}
+  @keyframes kbB{from{transform:scale(1.13) translate(1.6%,1.2%)}to{transform:scale(1.02) translate(0,0)}}
+  .fb{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:10px;background:#EDEBE4;color:#5F5E5A;padding:24px;text-align:center}
+  .fbt{font-size:17px;font-weight:500}
+  .fbu{font-size:11px;color:#888780;font-family:ui-monospace,Menlo,monospace;word-break:break-all;max-width:80%}
+  #sub{position:absolute;left:5%;right:5%;bottom:7%;padding:14px 20px;border-radius:12px;
+    background:rgba(20,20,18,.62);color:#fff;font-size:26px;line-height:1.45;text-align:center;
+    opacity:0;transition:opacity .4s ease;backdrop-filter:blur(2px)}
+  #sub.on{opacity:1}
+  #bar{position:absolute;left:0;right:0;top:0;height:4px;background:rgba(255,255,255,.28)}
+  #barIn{height:100%;width:0;background:#fff;transition:width .5s ease}
+  #cover{position:absolute;inset:0;display:none;background:var(--paper);z-index:5}
+  #cover.on{display:block}
+  #cover img{width:100%;height:100%;object-fit:cover;display:block}
+  #covtt{position:absolute;left:0;right:0;bottom:14%;text-align:center;padding:0 8%}
+  #covtt span{display:inline-block;padding:12px 22px;border-radius:12px;background:rgba(20,20,18,.62);
+    color:#fff;font-size:30px}
+  #gate{position:absolute;inset:0;z-index:9;display:flex;align-items:center;justify-content:center;
+    background:rgba(252,251,248,.94);cursor:pointer}
+  #gate button{font:inherit;font-size:19px;padding:14px 34px;border-radius:12px;border:.5px solid var(--line2);
+    background:#fff;color:var(--accent);cursor:pointer}
+  #done{position:absolute;inset:0;z-index:8;display:none;flex-direction:column;align-items:center;
+    justify-content:center;gap:14px;background:var(--paper)}
+  #done.on{display:flex}
+  #done button{font:inherit;font-size:16px;padding:10px 26px;border-radius:10px;border:.5px solid var(--line2);
+    background:#fff;color:var(--accent);cursor:pointer}
+  #panel{width:330px;flex:0 0 330px;background:var(--paper);border:.5px solid var(--line);
+    border-radius:12px;padding:14px}
+  body.clean #panel{display:none}
+  body.clean #app{padding:0;max-width:none}
+  body.clean #stage{border:0;border-radius:0}
+  #panel h3{margin:0 0 8px;font-size:14px;font-weight:500}
+  #panel h3:not(:first-child){margin-top:16px}
+  #panel textarea{width:100%;height:190px;font:11px/1.5 ui-monospace,Menlo,monospace;
+    padding:8px;border:.5px solid var(--line2);border-radius:8px;background:#fff;color:var(--ink);resize:vertical}
+  #panel button{font:inherit;font-size:13px;padding:7px 14px;border-radius:8px;
+    border:.5px solid var(--line2);background:#fff;color:var(--accent);cursor:pointer;margin:0 6px 6px 0}
+  #panel select,#panel input[type=range]{font:inherit;font-size:12px;width:100%;margin-bottom:6px}
+  .hint{font-size:11px;color:#5F5E5A;line-height:1.6;margin:6px 0 0}
+  #vnow{font-size:11px;color:#5F5E5A;margin:4px 0 6px}
+  #diag{white-space:pre-wrap;font:11px/1.5 ui-monospace,Menlo,monospace;max-height:230px;overflow:auto;
+    background:#fff;border:.5px solid var(--line2);border-radius:8px;padding:8px;color:var(--ink);display:none}
+  #banner{display:none;margin:0 0 10px;padding:8px 12px;border-radius:8px;background:#FCEBEB;color:var(--warn);font-size:12px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="wrap">
+    <div id="banner"></div>
+    <div id="stage">
+      <div class="layer" id="L0"></div>
+      <div class="layer" id="L1"></div>
+      <div id="cover"><img id="covimg" alt=""><div id="covtt"><span id="covtitle"></span></div></div>
+      <div id="sub"></div>
+      <div id="bar"><div id="barIn"></div></div>
+      <div id="done"><div style="font-size:22px">讲完啦</div><button onclick="replay()">再看一遍</button></div>
+      <div id="gate"><button type="button">&#9654; 点我开始</button></div>
+    </div>
+  </div>
+
+  <div id="panel">
+    <h3>剧本（JSON）</h3>
+    <textarea id="ta" spellcheck="false"></textarea>
+    <button type="button" onclick="preview()">直接预览</button>
+    <button type="button" onclick="makeLink()">生成链接并打开</button>
+    <p class="hint">格式：<code>{"title":"...","cover":"https://...","scenes":[{"img":"https://...","narration":"解说","dur":6}]}</code><br>
+    <code>dur</code> 可省略，默认按朗读结束自动切下一幕。</p>
+
+    <h3>音色</h3>
+    <select id="vsel"></select>
+    <div id="vnow"></div>
+    <button type="button" onclick="trySpeak()">试听</button>
+    <button type="button" onclick="diag()">列出这台电脑所有音色</button>
+    <label class="hint">语速 <span id="rv"></span>
+      <input id="rate" type="range" min="0.6" max="1.3" step="0.05" value="1"></label>
+    <pre id="diag"></pre>
+  </div>
+</div>
+
+<script>
+/* ================= 剧本读写 ================= */
+var $ = function(id){ return document.getElementById(id); };
+var scenes = [], title = '', cover = '';
+var si = -1, playing = false, curToken = 0, fallbackT = 0, coverT = 0, swapT = 0;
+var layers = [$('L0'), $('L1')], curL = 0;
+
+function b64d(s){
+  var b = s.replace(/-/g,'+').replace(/_/g,'/');
+  while (b.length % 4) b += '=';
+  var raw = atob(b), arr = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return new TextDecoder('utf-8').decode(arr);
+}
+function b64e(str){
+  var arr = new TextEncoder().encode(str), s = '';
+  for (var i = 0; i < arr.length; i++) s += String.fromCharCode(arr[i]);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+/* 剧本可以放在两个位置，两种链接都能开：
+   1) ?s=xxx  查询参数（新，推荐）—— 链接里没有 #，聊天工具、手机浏览器不会把它当锚点丢掉
+   2) #s=xxx  哈希（旧）—— 老链接继续能用 */
+function fromHash(){
+  var raw = '';
+  try {
+    var q = new URLSearchParams(location.search);
+    if (q.get('s')) raw = q.get('s');
+  } catch (e) {}
+  if (!raw) {
+    var h = location.hash || '';
+    var m = h.match(/[#&]s=([^&]+)/);
+    if (m) raw = m[1];
+  }
+  if (!raw) return null;
+  try { return JSON.parse(b64d(raw)); } catch (e) { return null; }
+}
+function loadObj(o){
+  if (!o || typeof o !== 'object') return false;
+  title = o.title || '';
+  cover = (typeof o.cover === 'string') ? o.cover : '';
+  scenes = (o.scenes && o.scenes.length) ? o.scenes : [];
+  if (!scenes.length) return false;
+  document.title = title ? (title + ' · 科学动画') : '科学动画';
+  $('covtitle').textContent = title;
+  if (cover) { $('covimg').src = cover; $('covimg').onerror = function(){ $('covimg').style.display='none'; }; }
+  else $('covimg').style.display = 'none';
+  preload();
+  return true;
+}
+/* 提前把后面几幕的图下载下来，不然切幕时会白一下 */
+function preload(){
+  var cache = [];
+  for (var i = 0; i < scenes.length; i++) {
+    var u = scenes[i].img;
+    if (!u) continue;
+    var im = new Image();
+    im.src = u;
+    cache.push(im);
+  }
+  window.__pre = cache;
+}
+function preview(){
+  var o = null;
+  try { o = JSON.parse($('ta').value); }
+  catch (e) { banner('JSON 写错了：' + e.message); return; }
+  if (!loadObj(o)) { banner('至少要有一幕 scenes'); return; }
+  banner('');
+  reset(); showGate();
+}
+function makeLink(){
+  var o = null;
+  try { o = JSON.parse($('ta').value); }
+  catch (e) { banner('JSON 写错了：' + e.message); return; }
+  if (!o.scenes || !o.scenes.length) { banner('至少要有一幕 scenes'); return; }
+  location.hash = 's=' + b64e(JSON.stringify(o));
+  setTimeout(function(){ location.reload(); }, 60);
+}
+function banner(t){
+  var b = $('banner');
+  b.textContent = t || '';
+  b.style.display = t ? 'block' : 'none';
+}
+
+/* ================= 播放 ================= */
+function reset(){
+  si = -1; playing = false; curToken++;
+  clearTimeout(fallbackT); clearTimeout(coverT); clearTimeout(swapT);
+  try { speechSynthesis.cancel(); } catch (e) {}
+  layers[0].style.opacity = '0'; layers[1].style.opacity = '0';
+  layers[0].innerHTML = ''; layers[1].innerHTML = '';
+  $('done').classList.remove('on');
+  $('cover').classList.remove('on');
+  $('sub').classList.remove('on');
+  $('barIn').style.width = '0';
+}
+function showGate(){ $('gate').style.display = 'flex'; }
+function start(){
+  $('gate').style.display = 'none';
+  playing = true;
+  if (cover && $('covimg').src) {
+    $('cover').classList.add('on');
+    coverT = setTimeout(function(){ $('cover').classList.remove('on'); next(); }, 2800);
+  } else { next(); }
+}
+function replay(){ reset(); start(); }
+function next(){
+  si++;
+  if (si >= scenes.length) { finish(); return; }
+  enter(si);
+}
+function finish(){
+  playing = false;
+  $('sub').classList.remove('on');
+  $('done').classList.add('on');
+  $('barIn').style.width = '100%';
+}
+function enter(i){
+  var my = ++curToken;
+  var sc = scenes[i] || {};
+  $('barIn').style.width = ((i + 1) / scenes.length * 100) + '%';
+  swapImg(sc.img, my);
+  setSub(sc.narration || '');
+  var dur = (typeof sc.dur === 'number' && sc.dur > 0) ? sc.dur : 6;
+  clearTimeout(fallbackT);
+  fallbackT = setTimeout(function(){ if (my === curToken) next(); }, dur * 1000 + 8000);
+  speakText(sc.narration || '', function(){
+    if (my !== curToken) return;
+    setTimeout(function(){ if (my === curToken) next(); }, 700);
+  });
+}
+/* my = 这一幕的令牌。只有它仍等于 curToken 时才允许动画面，
+   否则这一幕早被切走了，再动手就会把旧层又点亮、盖住新的一幕。 */
+function swapImg(url, my){
+  clearTimeout(swapT);
+  var out = layers[curL], inn = layers[1 - curL];
+  curL = 1 - curL;
+  inn.innerHTML = '';
+  inn.style.opacity = '0';
+  var settled = false;
+  function show(){
+    if (my !== curToken) return;      // 已经不是当前幕了，别再盖上来
+    inn.style.opacity = '1'; out.style.opacity = '0';
+  }
+  if (!url) { if (my === curToken) { fallbackBox(inn, '这一幕没有图片地址'); } show(); return; }
+  var img = document.createElement('img');
+  img.className = (Math.random() < 0.5) ? 'kbA' : 'kbB';
+  img.alt = '';
+  img.onload = function(){
+    settled = true; clearTimeout(swapT); show();
+  };
+  img.onerror = function(){
+    if (settled) return;
+    settled = true; clearTimeout(swapT);
+    if (my !== curToken) return;
+    fallbackBox(inn, '图片没能加载\n' + (url || ''));
+    show();
+  };
+  img.src = url;
+  inn.appendChild(img);
+  // 只有"这一幕还是当前幕、且迟迟没加载完"时才判超时
+  swapT = setTimeout(function(){ if (!settled && my === curToken) img.onerror(); }, 10000);
+}
+function fallbackBox(box, msg){
+  box.innerHTML = '';
+  var d = document.createElement('div');
+  d.className = 'fb';
+  var a = document.createElement('div');
+  a.className = 'fbt'; a.textContent = msg.split('\n')[0];
+  d.appendChild(a);
+  if (msg.indexOf('\n') > 0) {
+    var b = document.createElement('div');
+    b.className = 'fbu'; b.textContent = msg.split('\n')[1];
+    d.appendChild(b);
+  }
+  box.appendChild(d);
+}
+function setSub(t){
+  var s = $('sub');
+  s.textContent = t || '';
+  s.classList.toggle('on', !!t);
+}
+
+/* ================= 朗读 ================= */
+var voice = null, voiceList = [], rate = 1;
+var OLD_ZH = /婷婷|美佳|善怡|tingting|meijia|sinji/i;
+function scoreVoice(v){
+  var n = ((v.name || '') + ' ' + (v.voiceURI || ''));
+  var l = (v.lang || '').toLowerCase();
+  var s = 0;
+  if (l.indexOf('zh') === 0) s += 100; else if (/zh/i.test(n)) s += 40;
+  if (/cn|hans|simplified|普通话/i.test(l + n)) s += 20;
+  if (/premium|enhanced|增强|高级|超级/i.test(n)) s += 45;
+  if (OLD_ZH.test(n)) s -= 20;
+  else if (v.localService && l.indexOf('zh-cn') === 0) s += 30;
+  if (/siri/i.test(n)) s += 25;
+  if (/tingting|ting-ting|婷婷|meijia|美佳|siyu|思语|yaoyao|huihui|lili|丽丽|xiaoxiao|晓晓|yunxi/i.test(n)) s += 12;
+  if (v.localService) s += 4; else s -= 15;
+  return s;
+}
+function savePref(){
+  try {
+    localStorage.setItem('sciAnimVoice', voice ? (voice.name || '') : '');
+    localStorage.setItem('sciAnimRate', String(rate));
+  } catch (e) {}
+}
+function loadPref(){
+  try {
+    var r = parseFloat(localStorage.getItem('sciAnimRate'));
+    if (isFinite(r) && r >= 0.6 && r <= 1.4) rate = r;
+  } catch (e) {}
+}
+function applySaved(vs){
+  var want = '';
+  try { want = localStorage.getItem('sciAnimVoice') || ''; } catch (e) {}
+  if (!want) return false;
+  for (var i = 0; i < vs.length; i++) if ((vs[i].name || '') === want) { voice = vs[i]; return true; }
+  return false;
+}
+function fillVoiceList(vs){
+  var sel = $('vsel');
+  $('vnow').textContent = '当前音色：' + (voice ? voice.name : '没选中，用浏览器默认') + '　｜　共 ' + vs.length + ' 个音色';
+  var zh = [], seen = {};
+  for (var i = 0; i < vs.length; i++) {
+    if (scoreVoice(vs[i]) < 100) continue;
+    var nm = vs[i].name || vs[i].voiceURI;
+    if (seen[nm]) continue;
+    seen[nm] = 1; zh.push(vs[i]);
+  }
+  zh.sort(function(a, b){ return scoreVoice(b) - scoreVoice(a); });
+  if (!zh.length) { sel.innerHTML = '<option value="">这台电脑没装中文语音</option>'; voiceList = []; return; }
+  var html = '';
+  for (var k = 0; k < zh.length; k++) {
+    var n = zh[k].name || zh[k].voiceURI, sc = scoreVoice(zh[k]), tag = '';
+    if (!zh[k].localService) tag = '　（云端，要联网）';
+    else if (/premium|enhanced|增强|高级/i.test(n)) tag = '　（增强版，推荐）';
+    else if (sc >= 150) tag = '　（新版，推荐）';
+    else if (OLD_ZH.test(n)) tag = '　（老版，偏机械）';
+    else if (/zh-tw|zh-hk/i.test(zh[k].lang || '')) tag = '　（台湾/粤语口音）';
+    html += '<option value="' + k + '"' + (voice && voice.name === zh[k].name ? ' selected' : '') + '>' + n + tag + '</option>';
+  }
+  sel.innerHTML = html;
+  voiceList = zh;
+}
+function pickVoice(){
+  if (!window.speechSynthesis) return;
+  var vs = speechSynthesis.getVoices() || [];
+  if (!applySaved(vs)) {
+    var best = null, bs = -1;
+    for (var i = 0; i < vs.length; i++) {
+      var sc = scoreVoice(vs[i]);
+      if (sc > bs) { bs = sc; best = vs[i]; }
+    }
+    if (best && bs >= 100) voice = best;
+  }
+  fillVoiceList(vs);
+}
+function speakText(txt, done){
+  if (!txt || !window.speechSynthesis) { setTimeout(done, 900); return; }
+  if (!voice) pickVoice();
+  var fired = false;
+  var fin = function(){ if (fired) return; fired = true; done(); };
+  try {
+    speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(txt);
+    u.lang = 'zh-CN'; u.rate = rate; u.pitch = 1.0;
+    if (voice) u.voice = voice;
+    u.onend = fin; u.onerror = fin;
+    speechSynthesis.speak(u);
+    var est = Math.max(1500, txt.length * 240 / rate);
+    setTimeout(fin, est + 6000);
+  } catch (e) { setTimeout(fin, 900); }
+}
+function trySpeak(){
+  var t = (scenes[Math.max(si, 0)] || {}).narration || '科学真有趣，我们一起来看看吧';
+  speakText(t, function(){});
+}
+function diag(){
+  var vs = speechSynthesis.getVoices() || [];
+  var arr = vs.slice().sort(function(a, b){ return scoreVoice(b) - scoreVoice(a); });
+  var lines = [];
+  for (var i = 0; i < arr.length && i < 40; i++) {
+    lines.push((i + 1) + '. ' + arr[i].name + '  [' + arr[i].lang + ']  分数' + scoreVoice(arr[i]) + (arr[i].localService ? '  本机' : '  云端'));
+  }
+  var d = $('diag');
+  d.textContent = '共 ' + vs.length + ' 个音色，按适合程度排序：\n' + lines.join('\n')
+    + '\n\n当前用的是：' + (voice ? voice.name : '浏览器默认');
+  d.style.display = 'block';
+}
+
+/* ================= 事件 ================= */
+$('gate').onclick = start;
+$('vsel').onchange = function(){
+  var i = parseInt(this.value, 10);
+  if (voiceList[i]) { voice = voiceList[i]; savePref(); fillVoiceList(speechSynthesis.getVoices() || []); }
+};
+$('rate').oninput = function(){
+  rate = parseFloat(this.value) || 1;
+  $('rv').textContent = rate.toFixed(2);
+  savePref();
+};
+
+loadPref();
+$('rate').value = rate;
+$('rv').textContent = rate.toFixed(2);
+if (window.speechSynthesis) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+
+var o = fromHash();
+if (o && loadObj(o)) {
+  document.body.classList.add('clean');
+  $('ta').value = JSON.stringify(o, null, 1);
+  reset(); showGate();
+} else if (/(^|[?&])s=/.test(location.search) || /[#&]s=/.test(location.hash)) {
+  /* 链接里带着剧本却读不出来 = 这一串在转发时被截断了，
+     给个明白话，别让人对着空播放器以为是自己手机坏了 */
+  document.body.classList.add('clean');
+  banner('这个链接不完整，动画内容没能读出来。请让发链接给你的人重新发一次完整链接（不要只复制中间一段）。');
+} else {
+  $('ta').value = '{\n  "title": "这里写标题",\n  "cover": "",\n  "scenes": [\n    {"img": "https://.../1.png", "narration": "第一幕解说", "dur": 6},\n    {"img": "https://.../2.png", "narration": "第二幕解说", "dur": 6}\n  ]\n}';
+}
+/* 换了新剧本就整页重新加载：只改 # 后面时浏览器不发请求，页面会继续用内存里的旧剧本 */
+window.addEventListener('hashchange', function(){
+  if (fromHash()) location.reload();
+});
+</script>
+</body>
+</html>
